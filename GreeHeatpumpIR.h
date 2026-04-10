@@ -25,6 +25,10 @@
 #define GREE_AIRCON1_FAN3       0x30 // * high
 #define GREE_AIRCON1_TURBO      0x80 // * turbo mode on YAN
 
+// Extended fan speeds (YAG only, stored in block 2 byte 14 bits [6:4])
+#define GREE_AIRCON1_FAN4       0x04 // * higher (YAG)
+#define GREE_AIRCON1_FAN5       0x05 // * highest (YAG)
+
 // Only available on YAN and YT
 // Vertical air directions. Note that these cannot be set on all heat pumps
 #define GREE_VDIR_AUTO   0x00
@@ -36,7 +40,12 @@
 #define GREE_VDIR_MDOWN  0x05
 #define GREE_VDIR_DOWN   0x06
 
-// Only available on YAC
+// Extended vertical sweep modes (YAG)
+#define GREE_VDIR_SWEEP_3_5  0x07
+#define GREE_VDIR_SWEEP_2_4  0x09
+#define GREE_VDIR_SWEEP_1_3  0x0B
+
+// Only available on YAC, YAG
 // Horizontal air directions. Note that these cannot be set on all heat pumps
 #define GREE_HDIR_AUTO   0x00
 #define GREE_HDIR_MANUAL 0x00
@@ -47,9 +56,13 @@
 #define GREE_HDIR_MRIGHT 0x05
 #define GREE_HDIR_RIGHT  0x06
 
+// Extended horizontal vane modes (YAG)
+#define GREE_HDIR_LR     0x0C // Left + Right (1+5) simultaneously
+#define GREE_HDIR_CENTER  0x0D // Sweep to center
+
 #define GREE_IFEEL_BIT 0x08
 
-// Only available on YAA, YAC, and YT
+// Only available on YAA, YAC, YAG, and YT
 // byte 0
 #define GREE_VSWING     (1 << 6)
 // byte 2
@@ -64,6 +77,7 @@
 #define GREE_YAA     2
 #define GREE_YAC     3
 #define GREE_YT      4
+#define GREE_YAG     5
 
 
 class GreeHeatpumpIR : public HeatpumpIR
@@ -269,6 +283,63 @@ class GreeYAPHeatpumpIR : public GreeiFeelHeatpumpIR
             bool light, bool xfan = false,
             bool health = false, bool valve = false,
             bool sthtMode = false, bool enableWiFi = true);
+};
+
+// Gree YAG remote control
+// Sends 3 independent blocks (24 IR bytes) + optional iFeel
+// Supports: fan speeds 1-5, eco mode, light, health, xfan, turbo,
+//           vertical + horizontal vanes (including extended sweep modes),
+//           iFeel, display mode (set/indoor/outdoor temp)
+class GreeYAGHeatpumpIR : public GreeiFeelHeatpumpIR
+{
+  public:
+    GreeYAGHeatpumpIR();
+
+    using GreeiFeelHeatpumpIR::send;
+
+    virtual void send(
+            IRSender& IR,
+            uint8_t powerModeCmd, uint8_t operatingModeCmd,
+            uint8_t fanSpeedCmd, uint8_t temperatureCmd,
+            uint8_t swingVCmd, uint8_t swingHCmd,
+            bool turboMode, bool iFeelMode = false) override {
+        send(IR,
+             powerModeCmd, operatingModeCmd,
+             fanSpeedCmd, temperatureCmd,
+             swingVCmd, swingHCmd,
+             turboMode, iFeelMode,
+             true, false, false, false);
+    }
+
+    virtual void send(
+            IRSender& IR,
+            uint8_t powerModeCmd, uint8_t operatingModeCmd,
+            uint8_t fanSpeedCmd, uint8_t temperatureCmd,
+            uint8_t swingVCmd, uint8_t swingHCmd,
+            bool turboMode, bool iFeelMode,
+            bool light, bool xfan = false,
+            bool health = false, bool eco = false);
+
+  protected:
+    virtual void sendGree(
+            IRSender& IR,
+            uint8_t powerMode, uint8_t operatingMode,
+            uint8_t fanSpeed, uint8_t temperature,
+            uint8_t swingV, uint8_t swingH,
+            bool turboMode, bool iFeelMode) override;
+
+    void sendGree(
+            IRSender& IR,
+            uint8_t powerMode, uint8_t operatingMode,
+            uint8_t fanSpeed, uint8_t temperature,
+            uint8_t swingV, uint8_t swingH,
+            bool turboMode, bool iFeelMode,
+            bool light, bool xfan,
+            bool health, bool eco,
+            uint8_t extFanSpeed = 0);
+
+    // Sends a single 8-byte block (9-byte internal buffer with checksum)
+    void sendBlock(IRSender& IR, const uint8_t * block, bool isFirst);
 };
 
 #endif
